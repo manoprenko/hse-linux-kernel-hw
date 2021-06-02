@@ -1,0 +1,97 @@
+diff --git a/fs/proc/base.c b/fs/proc/base.c
+index 9cbd915025ad..7e693b17569d 100644
+--- a/fs/proc/base.c
++++ b/fs/proc/base.c
+@@ -2619,7 +2619,7 @@ static struct dentry *proc_pident_instantiate(struct dentry *dentry,
+ 	return d_splice_alias(inode, dentry);
+ }
+ 
+-static struct dentry *proc_pident_lookup(struct inode *dir, 
++static struct dentry *proc_pident_lookup(struct inode *dir,
+ 					 struct dentry *dentry,
+ 					 const struct pid_entry *p,
+ 					 const struct pid_entry *end)
+@@ -2832,7 +2832,7 @@ static const struct pid_entry attr_dir_stuff[] = {
+ 
+ static int proc_attr_dir_readdir(struct file *file, struct dir_context *ctx)
+ {
+-	return proc_pident_readdir(file, ctx, 
++	return proc_pident_readdir(file, ctx,
+ 				   attr_dir_stuff, ARRAY_SIZE(attr_dir_stuff));
+ }
+ 
+@@ -3278,6 +3278,7 @@ static const struct pid_entry tgid_base_stuff[] = {
+ #ifdef CONFIG_SECCOMP_CACHE_DEBUG
+ 	ONE("seccomp_cache", S_IRUSR, proc_pid_seccomp_cache),
+ #endif
++	ONE("resched_count", S_IRUGO, proc_pid_resched_count),
+ };
+ 
+ static int proc_tgid_base_readdir(struct file *file, struct dir_context *ctx)
+@@ -3611,6 +3612,7 @@ static const struct pid_entry tid_base_stuff[] = {
+ #ifdef CONFIG_SECCOMP_CACHE_DEBUG
+ 	ONE("seccomp_cache", S_IRUSR, proc_pid_seccomp_cache),
+ #endif
++	ONE("resched_count", S_IRUGO, proc_pid_resched_count),
+ };
+ 
+ static int proc_tid_base_readdir(struct file *file, struct dir_context *ctx)
+diff --git a/include/linux/sched.h b/include/linux/sched.h
+index 28a98fc4ded4..a4283b923316 100644
+--- a/include/linux/sched.h
++++ b/include/linux/sched.h
+@@ -1391,6 +1391,8 @@ struct task_struct {
+ 	struct llist_head               kretprobe_instances;
+ #endif
+ 
++	int resched_counter;
++
+ 	/*
+ 	 * New fields for task_struct should be added above here, so that
+ 	 * they are included in the randomized portion of task_struct.
+@@ -2037,6 +2039,9 @@ static inline bool vcpu_is_preempted(int cpu)
+ extern long sched_setaffinity(pid_t pid, const struct cpumask *new_mask);
+ extern long sched_getaffinity(pid_t pid, struct cpumask *mask);
+ 
++extern int proc_pid_resched_count(struct seq_file *m, struct pid_namespace *ns,
++			    struct pid *pid, struct task_struct *tsk);
++
+ #ifndef TASK_SIZE_OF
+ #define TASK_SIZE_OF(tsk)	TASK_SIZE
+ #endif
+diff --git a/kernel/fork.c b/kernel/fork.c
+index dc06afd725cb..cf4ed926f1aa 100644
+--- a/kernel/fork.c
++++ b/kernel/fork.c
+@@ -1956,6 +1956,8 @@ static __latent_entropy struct task_struct *copy_process(
+ 		siginitsetinv(&p->blocked, sigmask(SIGKILL)|sigmask(SIGSTOP));
+ 	}
+ 
++	p->resched_counter = 0;
++
+ 	/*
+ 	 * This _must_ happen before we call free_task(), i.e. before we jump
+ 	 * to any of the bad_fork_* labels. This is to avoid freeing
+diff --git a/kernel/sched/core.c b/kernel/sched/core.c
+index 4ca80df205ce..7bd3a7990845 100644
+--- a/kernel/sched/core.c
++++ b/kernel/sched/core.c
+@@ -5220,6 +5220,8 @@ asmlinkage __visible void __sched schedule(void)
+ {
+ 	struct task_struct *tsk = current;
+ 
++	++tsk->resched_counter;
++
+ 	sched_submit_work(tsk);
+ 	do {
+ 		preempt_disable();
+@@ -9553,3 +9555,9 @@ void call_trace_sched_update_nr_running(struct rq *rq, int count)
+ {
+         trace_sched_update_nr_running_tp(rq, count);
+ }
++
++int proc_pid_resched_count(struct seq_file *m, struct pid_namespace *ns,
++			    struct pid *pid, struct task_struct *tsk) {
++	seq_printf(m, "%d\n", tsk->resched_counter);
++	return 0;
++}

@@ -1,0 +1,12 @@
+.spy.ko.cmd
+.spy.mod.cmd
+.spy.mod.o.cmd
+.spy.o.cmd
+Module.symvers
+modules.order
+spy.ko
+spy.mod
+spy.mod.c
+spy.mod.o
+spy.o
+
